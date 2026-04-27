@@ -1,0 +1,325 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────
+
+enum TenantPlan {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+enum RoleType {
+  SUPER_ADMIN
+  TENANT_ADMIN
+  CREATOR
+  REVIEWER
+  RESPONDENT
+}
+
+enum FormType {
+  SURVEY
+  TRAINING
+}
+
+enum FormStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ItemType {
+  TEXT
+  IMAGE
+  VIDEO
+  AUDIO
+  PDF
+  QUESTION
+}
+
+enum QuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  OPEN_TEXT
+  SCALE
+  BOOLEAN
+  RATING
+}
+
+enum AssignmentStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  EXPIRED
+}
+
+enum SessionStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
+// ─────────────────────────────────────────────
+// TENANT
+// ─────────────────────────────────────────────
+
+model Tenant {
+  id        String     @id @default(uuid())
+  name      String     @db.VarChar(120)
+  slug      String     @unique @db.VarChar(60)
+  plan      TenantPlan @default(FREE)
+  settings  Json       @default("{}")
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  deletedAt DateTime?
+
+  users     User[]
+  userRoles UserRole[]
+  forms     Form[]
+}
+
+// ─────────────────────────────────────────────
+// USER
+// ─────────────────────────────────────────────
+
+model User {
+  id           String    @id @default(uuid())
+  tenantId     String
+  email        String    @db.VarChar(255)
+  passwordHash String    @db.VarChar(255)
+  firstName    String    @db.VarChar(80)
+  lastName     String    @db.VarChar(80)
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  tenant           Tenant            @relation(fields: [tenantId], references: [id])
+  roles            UserRole[]
+  createdForms     Form[]            @relation("CreatedBy")
+  assignments      Assignment[]      @relation("AssignedTo")
+  assignedByMe     Assignment[]      @relation("AssignedBy")
+  responseSessions ResponseSession[]
+  certificates     Certificate[]
+
+  @@unique([email, tenantId])
+  @@index([tenantId])
+}
+
+// ─────────────────────────────────────────────
+// USER_ROLE  (pivot N:M — user can have multiple roles per tenant)
+// ─────────────────────────────────────────────
+
+model UserRole {
+  id       String   @id @default(uuid())
+  userId   String
+  tenantId String
+  role     RoleType
+
+  user   User   @relation(fields: [userId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([userId, tenantId, role])
+  @@index([userId, tenantId])
+}
+
+// ─────────────────────────────────────────────
+// FORM
+// config JSONB shape:
+// {
+//   sequential: boolean,
+//   allowSkip: boolean,
+//   passingScore: number,      -- 0-100, null = no scoring
+//   maxAttempts: number,       -- null = unlimited
+//   timeLimit: number | null,  -- seconds
+//   shuffleQuestions: boolean,
+//   showResultsAfter: boolean,
+//   certificateOnPass: boolean
+// }
+// ─────────────────────────────────────────────
+
+model Form {
+  id           String     @id @default(uuid())
+  tenantId     String
+  createdById  String
+  title        String     @db.VarChar(255)
+  description  String?    @db.Text
+  type         FormType
+  status       FormStatus @default(DRAFT)
+  config       Json       @default("{}")
+  version      Int        @default(1)
+  parentFormId String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  deletedAt    DateTime?
+
+  tenant     Tenant @relation(fields: [tenantId], references: [id])
+  createdBy  User   @relation("CreatedBy", fields: [createdById], references: [id])
+  parentForm Form?  @relation("FormVersions", fields: [parentFormId], references: [id])
+  childForms Form[] @relation("FormVersions")
+
+  sections         Section[]
+  assignments      Assignment[]
+  responseSessions ResponseSession[]
+  certificates     Certificate[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, type])
+}
+
+// ─────────────────────────────────────────────
+// SECTION
+// branchingRules JSONB shape (array):
+// [{ questionItemId, condition, value, goToSectionId }]
+// ─────────────────────────────────────────────
+
+model Section {
+  id             String   @id @default(uuid())
+  formId         String
+  title          String   @db.VarChar(255)
+  order          Int
+  branchingRules Json     @default("[]")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  form  Form   @relation(fields: [formId], references: [id], onDelete: Cascade)
+  items Item[]
+
+  @@index([formId, order])
+}
+
+// ─────────────────────────────────────────────
+// ITEM
+// content JSONB shape varies by type — see spec §2 for full structure
+// SECURITY: correctAnswers MUST be stripped when role = RESPONDENT
+// ─────────────────────────────────────────────
+
+model Item {
+  id        String   @id @default(uuid())
+  sectionId String
+  type      ItemType
+  order     Int
+  content   Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  section       Section        @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  itemResponses ItemResponse[]
+
+  @@index([sectionId, order])
+}
+
+// ─────────────────────────────────────────────
+// ASSIGNMENT
+// ─────────────────────────────────────────────
+
+model Assignment {
+  id           String           @id @default(uuid())
+  formId       String
+  userId       String
+  assignedById String
+  dueDate      DateTime?
+  status       AssignmentStatus @default(PENDING)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  form       Form @relation(fields: [formId], references: [id])
+  user       User @relation("AssignedTo", fields: [userId], references: [id])
+  assignedBy User @relation("AssignedBy", fields: [assignedById], references: [id])
+
+  @@unique([formId, userId])
+  @@index([userId, status])
+  @@index([formId])
+}
+
+// ─────────────────────────────────────────────
+// RESPONSE_SESSION
+// progressSnapshot JSONB: { currentSectionIndex, visitedSectionIds, answeredItemIds, lastSavedAt }
+// ─────────────────────────────────────────────
+
+model ResponseSession {
+  id               String        @id @default(uuid())
+  formId           String
+  userId           String
+  attempt          Int           @default(1)
+  status           SessionStatus @default(IN_PROGRESS)
+  score            Decimal?      @db.Decimal(5, 2)
+  passed           Boolean?
+  progressSnapshot Json          @default("{}")
+  startedAt        DateTime      @default(now())
+  completedAt      DateTime?
+
+  form          Form           @relation(fields: [formId], references: [id])
+  user          User           @relation(fields: [userId], references: [id])
+  itemResponses ItemResponse[]
+  certificate   Certificate?
+
+  @@index([formId, userId])
+  @@index([userId, status])
+}
+
+// ─────────────────────────────────────────────
+// ITEM_RESPONSE
+// answer JSONB: { selected: string[] } | { text: string } | { value: number | boolean }
+// ─────────────────────────────────────────────
+
+model ItemResponse {
+  id          String   @id @default(uuid())
+  sessionId   String
+  itemId      String
+  answer      Json
+  isCorrect   Boolean?
+  timeSpentMs Int      @default(0)
+  answeredAt  DateTime @default(now())
+
+  session ResponseSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  item    Item            @relation(fields: [itemId], references: [id])
+
+  @@unique([sessionId, itemId])
+  @@index([sessionId])
+}
+
+// ─────────────────────────────────────────────
+// CERTIFICATE
+// ─────────────────────────────────────────────
+
+model Certificate {
+  id               String   @id @default(uuid())
+  sessionId        String   @unique
+  userId           String
+  formId           String
+  issuedAt         DateTime @default(now())
+  pdfUrl           String   @db.VarChar(500)
+  verificationCode String   @unique @default(uuid())
+
+  session ResponseSession @relation(fields: [sessionId], references: [id])
+  user    User            @relation(fields: [userId], references: [id])
+  form    Form            @relation(fields: [formId], references: [id])
+
+  @@index([userId])
+  @@index([verificationCode])
+}
+
+// ─────────────────────────────────────────────
+// MEDIA_ASSET  (tracks S3 uploads)
+// ─────────────────────────────────────────────
+
+model MediaAsset {
+  id           String   @id @default(uuid())
+  tenantId     String
+  uploadedById String
+  fileKey      String   @unique @db.VarChar(500)
+  mimeType     String   @db.VarChar(100)
+  sizeBytes    Int
+  confirmed    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  @@index([tenantId])
+}
