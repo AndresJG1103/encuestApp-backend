@@ -1,4 +1,4 @@
-import {
+﻿import {
   Body,
   Controller,
   Get,
@@ -8,6 +8,16 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiCreatedResponse,
+  ApiOkResponse,
+  ApiUnauthorizedResponse,
+  ApiForbiddenResponse,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { Roles } from '@shared/decorators/roles.decorator';
 import { CurrentTenant } from '@shared/decorators/current-tenant.decorator';
 import { CurrentUser } from '@shared/decorators/current-user.decorator';
@@ -18,12 +28,18 @@ import {
   UpdateAssignmentDto,
 } from '../application/dtos/assignment.dto';
 
+@ApiTags('Assignments')
+@ApiBearerAuth('JWT')
+@ApiUnauthorizedResponse({ description: 'Missing or invalid access token' })
+@ApiForbiddenResponse({ description: 'Insufficient role' })
 @Controller('assignments')
 export class AssignmentController {
   constructor(private readonly assignmentService: AssignmentService) {}
 
   @Post()
   @Roles('CREATOR', 'TENANT_ADMIN', 'SUPER_ADMIN')
+  @ApiOperation({ summary: 'Assign a form to a user [CREATOR]' })
+  @ApiCreatedResponse({ description: 'Assignment created' })
   create(
     @CurrentTenant() tenantId: string,
     @CurrentUser() user: JwtPayload,
@@ -34,6 +50,10 @@ export class AssignmentController {
 
   @Get('my')
   @Roles('RESPONDENT', 'REVIEWER', 'CREATOR', 'TENANT_ADMIN', 'SUPER_ADMIN')
+  @ApiOperation({ summary: 'Get my assigned forms (paginated)' })
+  @ApiOkResponse({ description: 'Paginated list of assignments' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
   findMine(
     @CurrentUser() user: JwtPayload,
     @CurrentTenant() tenantId: string,
@@ -48,6 +68,8 @@ export class AssignmentController {
 
   @Patch(':id')
   @Roles('CREATOR', 'TENANT_ADMIN', 'SUPER_ADMIN')
+  @ApiOperation({ summary: 'Update assignment status or due date [CREATOR]' })
+  @ApiOkResponse({ description: 'Updated assignment' })
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentTenant() tenantId: string,
@@ -56,3 +78,4 @@ export class AssignmentController {
     return this.assignmentService.update(id, tenantId, dto);
   }
 }
+

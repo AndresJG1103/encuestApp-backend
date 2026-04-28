@@ -1,4 +1,4 @@
-import {
+﻿import {
   Body,
   Controller,
   Get,
@@ -9,6 +9,18 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiCreatedResponse,
+  ApiOkResponse,
+  ApiUnauthorizedResponse,
+  ApiForbiddenResponse,
+  ApiNotFoundResponse,
+  ApiConflictResponse,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { Roles } from '@shared/decorators/roles.decorator';
 import { CurrentUser } from '@shared/decorators/current-user.decorator';
 import { CurrentTenant } from '@shared/decorators/current-tenant.decorator';
@@ -21,6 +33,10 @@ import { SubmitAnswerDto } from '../application/dtos/submit-answer.dto';
 import { PrismaService } from '@shared/prisma/prisma.service';
 import { RedisService } from '@shared/redis/redis.service';
 
+@ApiTags('Responses')
+@ApiBearerAuth('JWT')
+@ApiUnauthorizedResponse({ description: 'Missing or invalid access token' })
+@ApiForbiddenResponse({ description: 'Insufficient role' })
 @Controller('responses')
 export class ResponseController {
   constructor(
@@ -34,6 +50,10 @@ export class ResponseController {
   @Post('start')
   @Roles('RESPONDENT', 'CREATOR', 'TENANT_ADMIN', 'SUPER_ADMIN')
   @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Start a new response session for a published form' })
+  @ApiCreatedResponse({ description: 'Session created and cached in Redis' })
+  @ApiNotFoundResponse({ description: 'Form not found or not published' })
+  @ApiConflictResponse({ description: 'Session already in progress or maxAttempts reached' })
   start(
     @CurrentUser() user: JwtPayload,
     @CurrentTenant() tenantId: string,
@@ -49,6 +69,9 @@ export class ResponseController {
   @Post(':sessionId/answer')
   @Roles('RESPONDENT', 'CREATOR', 'TENANT_ADMIN', 'SUPER_ADMIN')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Submit (or update) an answer for one item' })
+  @ApiOkResponse({ description: 'ItemResponse upserted with isCorrect flag' })
+  @ApiNotFoundResponse({ description: 'Session or item not found' })
   answer(
     @Param('sessionId', ParseUUIDPipe) sessionId: string,
     @CurrentUser() user: JwtPayload,
@@ -66,6 +89,9 @@ export class ResponseController {
   @Post(':sessionId/complete')
   @Roles('RESPONDENT', 'CREATOR', 'TENANT_ADMIN', 'SUPER_ADMIN')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Complete session â€” calculates score, queues certificate if training' })
+  @ApiOkResponse({ description: '{ session, score, passed, certificateQueued }' })
+  @ApiNotFoundResponse({ description: 'Session not found' })
   complete(
     @Param('sessionId', ParseUUIDPipe) sessionId: string,
     @CurrentUser() user: JwtPayload,
@@ -75,15 +101,15 @@ export class ResponseController {
 
   @Get(':sessionId/progress')
   @Roles('RESPONDENT', 'CREATOR', 'TENANT_ADMIN', 'SUPER_ADMIN')
+  @ApiOperation({ summary: 'Get current session progress snapshot (Redis first, then DB)' })
+  @ApiOkResponse({ description: 'Progress snapshot object' })
   async progress(
     @Param('sessionId', ParseUUIDPipe) sessionId: string,
     @CurrentUser() user: JwtPayload,
   ) {
-    // Try Redis cache first
     const cached = await this.redis.getSessionProgress(sessionId);
     if (cached) return cached;
 
-    // Fall back to DB
     const session = await this.prisma.responseSession.findFirst({
       where: { id: sessionId, userId: user.sub },
       select: { progressSnapshot: true },
@@ -94,6 +120,10 @@ export class ResponseController {
 
   @Get('my')
   @Roles('RESPONDENT', 'CREATOR', 'TENANT_ADMIN', 'SUPER_ADMIN')
+  @ApiOperation({ summary: 'List my response sessions (paginated)' })
+  @ApiOkResponse({ description: 'Paginated list of sessions with form info' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
   async findMine(
     @CurrentUser() user: JwtPayload,
     @Query('page') page?: string,
@@ -127,3 +157,4 @@ export class ResponseController {
     };
   }
 }
+

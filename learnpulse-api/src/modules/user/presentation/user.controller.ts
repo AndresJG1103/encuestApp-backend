@@ -1,4 +1,4 @@
-import {
+﻿import {
   Body,
   Controller,
   Delete,
@@ -11,18 +11,36 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiCreatedResponse,
+  ApiOkResponse,
+  ApiNoContentResponse,
+  ApiNotFoundResponse,
+  ApiUnauthorizedResponse,
+  ApiForbiddenResponse,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { Roles } from '@shared/decorators/roles.decorator';
 import { CurrentTenant } from '@shared/decorators/current-tenant.decorator';
 import { UserService } from '../application/user.service';
 import { AssignRoleDto, CreateUserDto, UpdateUserDto } from '../application/dtos/user.dto';
 import { RoleType } from '@prisma/client';
 
+@ApiTags('Users')
+@ApiBearerAuth('JWT')
+@ApiUnauthorizedResponse({ description: 'Missing or invalid access token' })
+@ApiForbiddenResponse({ description: 'Insufficient role' })
 @Controller('users')
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
   @Post()
   @Roles('TENANT_ADMIN', 'SUPER_ADMIN')
+  @ApiOperation({ summary: 'Create user in tenant [TENANT_ADMIN]' })
+  @ApiCreatedResponse({ description: 'User created (passwordHash never returned)' })
   create(
     @CurrentTenant() tenantId: string,
     @Body() dto: CreateUserDto,
@@ -32,6 +50,10 @@ export class UserController {
 
   @Get()
   @Roles('TENANT_ADMIN', 'SUPER_ADMIN')
+  @ApiOperation({ summary: 'List users in tenant [TENANT_ADMIN]' })
+  @ApiOkResponse({ description: 'Paginated list of users' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
   findAll(
     @CurrentTenant() tenantId: string,
     @Query('page') page?: string,
@@ -45,6 +67,9 @@ export class UserController {
 
   @Get(':id')
   @Roles('TENANT_ADMIN', 'SUPER_ADMIN')
+  @ApiOperation({ summary: 'Get user by ID [TENANT_ADMIN]' })
+  @ApiOkResponse({ description: 'User object' })
+  @ApiNotFoundResponse({ description: 'User not found' })
   findOne(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentTenant() tenantId: string,
@@ -54,6 +79,9 @@ export class UserController {
 
   @Patch(':id')
   @Roles('TENANT_ADMIN', 'SUPER_ADMIN')
+  @ApiOperation({ summary: 'Update user [TENANT_ADMIN]' })
+  @ApiOkResponse({ description: 'Updated user' })
+  @ApiNotFoundResponse({ description: 'User not found' })
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentTenant() tenantId: string,
@@ -65,6 +93,8 @@ export class UserController {
   @Post(':id/roles')
   @Roles('TENANT_ADMIN', 'SUPER_ADMIN')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Assign role to user [TENANT_ADMIN]' })
+  @ApiNoContentResponse({ description: 'Role assigned' })
   assignRole(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentTenant() tenantId: string,
@@ -76,6 +106,8 @@ export class UserController {
   @Delete(':id/roles/:role')
   @Roles('TENANT_ADMIN', 'SUPER_ADMIN')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Remove role from user [TENANT_ADMIN]' })
+  @ApiNoContentResponse({ description: 'Role removed' })
   removeRole(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentTenant() tenantId: string,
@@ -87,6 +119,9 @@ export class UserController {
   @Delete(':id')
   @Roles('TENANT_ADMIN', 'SUPER_ADMIN')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Soft-delete user [TENANT_ADMIN]' })
+  @ApiNoContentResponse({ description: 'User deleted' })
+  @ApiNotFoundResponse({ description: 'User not found' })
   remove(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentTenant() tenantId: string,
@@ -94,3 +129,4 @@ export class UserController {
     return this.userService.softDelete(id, tenantId);
   }
 }
+
