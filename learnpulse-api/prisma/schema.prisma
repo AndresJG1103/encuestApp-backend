@@ -90,16 +90,17 @@ model Tenant {
 // ─────────────────────────────────────────────
 
 model User {
-  id           String    @id @default(uuid())
-  tenantId     String
-  email        String    @db.VarChar(255)
-  passwordHash String    @db.VarChar(255)
-  firstName    String    @db.VarChar(80)
-  lastName     String    @db.VarChar(80)
-  isActive     Boolean   @default(true)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  deletedAt    DateTime?
+  id               String    @id @default(uuid())
+  tenantId         String
+  email            String    @db.VarChar(255)
+  passwordHash     String    @db.VarChar(255)
+  firstName        String    @db.VarChar(80)
+  lastName         String    @db.VarChar(80)
+  identityDocument String    @db.VarChar(30)
+  isActive         Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
 
   tenant           Tenant            @relation(fields: [tenantId], references: [id])
   roles            UserRole[]
@@ -110,6 +111,7 @@ model User {
   certificates     Certificate[]
 
   @@unique([email, tenantId])
+  @@unique([identityDocument, tenantId])
   @@index([tenantId])
 }
 

@@ -49,6 +49,7 @@ async function main() {
       passwordHash: await bcrypt.hash('Admin1234!', 12),
       firstName: 'Admin',
       lastName: 'Demo',
+      identityDocument: '10000001A',
       roles: { create: { tenantId: tenant.id, role: RoleType.TENANT_ADMIN } },
     },
   });
@@ -62,6 +63,7 @@ async function main() {
       passwordHash: await bcrypt.hash('Creator1234!', 12),
       firstName: 'Creator',
       lastName: 'Demo',
+      identityDocument: '20000002B',
       roles: { create: { tenantId: tenant.id, role: RoleType.CREATOR } },
     },
   });
@@ -75,6 +77,7 @@ async function main() {
       passwordHash: await bcrypt.hash('Respondent1234!', 12),
       firstName: 'Respondent',
       lastName: 'Demo',
+      identityDocument: '30000003C',
       roles: { create: { tenantId: tenant.id, role: RoleType.RESPONDENT } },
     },
   });

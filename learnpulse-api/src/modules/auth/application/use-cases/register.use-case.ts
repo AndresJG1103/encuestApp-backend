@@ -13,6 +13,7 @@ export interface RegisterDto {
   password: string;
   firstName: string;
   lastName: string;
+  identityDocument: string;
   role?: RoleType;
 }
 
@@ -40,6 +41,14 @@ export class RegisterUseCase {
 
     const passwordHash = await bcrypt.hash(dto.password, 12);
 
+    const existingDoc = await this.prisma.user.findFirst({
+      where: { identityDocument: dto.identityDocument, tenantId: tenant.id, deletedAt: null },
+    });
+
+    if (existingDoc) {
+      throw new BadRequestException('Identity document already registered in this tenant');
+    }
+
     const user = await this.prisma.user.create({
       data: {
         tenantId: tenant.id,
@@ -47,6 +56,7 @@ export class RegisterUseCase {
         passwordHash,
         firstName: dto.firstName,
         lastName: dto.lastName,
+        identityDocument: dto.identityDocument,
         roles: {
           create: {
             tenantId: tenant.id,

@@ -22,6 +22,12 @@ export class UserService {
 
     if (existing) throw new BadRequestException('Email already registered');
 
+    const existingDoc = await this.prisma.user.findFirst({
+      where: { identityDocument: dto.identityDocument, tenantId, deletedAt: null },
+    });
+
+    if (existingDoc) throw new BadRequestException('Identity document already registered');
+
     const passwordHash = await bcrypt.hash(dto.password, 12);
 
     const user = await this.prisma.user.create({
@@ -31,6 +37,7 @@ export class UserService {
         passwordHash,
         firstName: dto.firstName,
         lastName: dto.lastName,
+        identityDocument: dto.identityDocument,
         roles: {
           create: dto.roles.map((role) => ({ tenantId, role })),
         },
@@ -50,15 +57,28 @@ export class UserService {
     const limit = Math.min(params.limit ?? 20, 100);
     const skip = (page - 1) * limit;
 
+    const searchFilter = params.search
+      ? {
+          OR: [
+            { email: { contains: params.search, mode: 'insensitive' as const } },
+            { identityDocument: { contains: params.search, mode: 'insensitive' as const } },
+            { firstName: { contains: params.search, mode: 'insensitive' as const } },
+            { lastName: { contains: params.search, mode: 'insensitive' as const } },
+          ],
+        }
+      : {};
+
+    const where = { tenantId, deletedAt: null, ...searchFilter };
+
     const [data, total] = await Promise.all([
       this.prisma.user.findMany({
-        where: { tenantId, deletedAt: null },
+        where,
         skip,
         take: limit,
         include: { roles: true },
         orderBy: { createdAt: 'desc' },
       }),
-      this.prisma.user.count({ where: { tenantId, deletedAt: null } }),
+      this.prisma.user.count({ where }),
     ]);
 
     const safeData = data.map(({ passwordHash: _ph, ...u }) => u);
@@ -94,6 +114,7 @@ export class UserService {
       data: {
         ...(dto.firstName && { firstName: dto.firstName }),
         ...(dto.lastName && { lastName: dto.lastName }),
+        ...(dto.identityDocument && { identityDocument: dto.identityDocument }),
         ...(dto.isActive !== undefined && { isActive: dto.isActive }),
       },
       include: { roles: true },
