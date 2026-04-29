@@ -13,7 +13,7 @@ export interface RegisterDto {
   password: string;
   firstName: string;
   lastName: string;
-  role: RoleType;
+  role?: RoleType;
 }
 
 @Injectable()
@@ -50,7 +50,7 @@ export class RegisterUseCase {
         roles: {
           create: {
             tenantId: tenant.id,
-            role: dto.role,
+            role: dto.role ?? RoleType.RESPONDENT,
           },
         },
       },

@@ -2,6 +2,7 @@ import {
   IsEmail,
   IsEnum,
   IsNotEmpty,
+  IsOptional,
   IsString,
   MaxLength,
   MinLength,
@@ -35,5 +36,6 @@ export class RegisterDto {
   lastName!: string;
 
   @IsEnum(RoleType)
-  role!: RoleType;
+  @IsOptional()
+  role?: RoleType;
 }
