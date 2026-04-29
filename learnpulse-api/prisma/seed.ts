@@ -8,10 +8,14 @@
  *   Password:    Admin1234!
  */
 
-import { PrismaClient, RoleType, TenantPlan } from '@prisma/client';
+import 'dotenv/config';
+import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { RoleType, TenantPlan } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
-const prisma = new PrismaClient();
+const adapter = new PrismaPg({ connectionString: process.env['DATABASE_URL']! });
+const prisma = new PrismaClient({ adapter });
 
 async function main() {
   // Create tenant
