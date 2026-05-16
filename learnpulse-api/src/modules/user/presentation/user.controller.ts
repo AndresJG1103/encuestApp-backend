@@ -1,4 +1,4 @@
-﻿import {
+import {
   Body,
   Controller,
   Delete,
@@ -130,6 +130,17 @@ export class UserController {
     @CurrentTenant() tenantId: string,
   ) {
     return this.userService.softDelete(id, tenantId);
+  }
+
+  @Post(':id/toggle-status')
+  @Roles('TENANT_ADMIN', 'SUPER_ADMIN')
+  @ApiOperation({ summary: 'Toggle user active status [TENANT_ADMIN]' })
+  @ApiOkResponse({ description: 'Updated user' })
+  toggleStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentTenant() tenantId: string,
+  ) {
+    return this.userService.toggleStatus(id, tenantId);
   }
 }
 

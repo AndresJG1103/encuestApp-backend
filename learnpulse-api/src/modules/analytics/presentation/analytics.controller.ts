@@ -1,4 +1,4 @@
-﻿import { Controller, Get, Param, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Param, ParseUUIDPipe } from '@nestjs/common';
 import {
   ApiTags,
   ApiBearerAuth,
@@ -16,9 +16,17 @@ import { AnalyticsService } from '../application/analytics.service';
 @ApiBearerAuth('JWT')
 @ApiUnauthorizedResponse({ description: 'Missing or invalid access token' })
 @ApiForbiddenResponse({ description: 'Requires REVIEWER role or higher' })
-@Controller('analytics')
+@Controller('reports')
 export class AnalyticsController {
   constructor(private readonly analyticsService: AnalyticsService) {}
+
+  @Get('dashboard')
+  @Roles('TENANT_ADMIN', 'SUPER_ADMIN')
+  @ApiOperation({ summary: 'Get global dashboard metrics for the tenant' })
+  @ApiOkResponse({ description: 'Object containing dashboard metrics' })
+  getDashboard(@CurrentTenant() tenantId: string) {
+    return this.analyticsService.getDashboardMetrics(tenantId);
+  }
 
   @Get('forms/:id/summary')
   @Roles('REVIEWER', 'CREATOR', 'TENANT_ADMIN', 'SUPER_ADMIN')
@@ -68,4 +76,3 @@ export class AnalyticsController {
     return this.analyticsService.getTimeAnalytics(id, tenantId);
   }
 }
-

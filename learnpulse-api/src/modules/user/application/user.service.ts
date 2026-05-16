@@ -147,4 +147,9 @@ export class UserService {
       data: { deletedAt: new Date() },
     });
   }
+
+  async toggleStatus(id: string, tenantId: string): Promise<SafeUser> {
+    const user = await this.findById(id, tenantId);
+    return this.update(id, tenantId, { isActive: !user.isActive });
+  }
 }

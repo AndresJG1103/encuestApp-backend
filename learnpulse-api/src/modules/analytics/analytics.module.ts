@@ -1,5 +1,5 @@
 import { BullModule } from '@nestjs/bull';
-import { Module } from '@nestjs/common';
+import { Module, OnModuleInit, Logger } from '@nestjs/common';
 import { AnalyticsService } from './application/analytics.service';
 import { AnalyticsController } from './presentation/analytics.controller';
 import { AnalyticsProcessor } from './infrastructure/analytics.processor';
@@ -11,4 +11,9 @@ import { AnalyticsProcessor } from './infrastructure/analytics.processor';
   providers: [AnalyticsService, AnalyticsProcessor],
   controllers: [AnalyticsController],
 })
-export class AnalyticsModule {}
+export class AnalyticsModule implements OnModuleInit {
+  private readonly logger = new Logger(AnalyticsModule.name);
+  onModuleInit() {
+    this.logger.log('AnalyticsModule initialized');
+  }
+}
