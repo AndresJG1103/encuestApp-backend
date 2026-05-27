@@ -9,6 +9,7 @@
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -20,6 +21,7 @@ import {
   ApiNotFoundResponse,
   ApiUnauthorizedResponse,
   ApiForbiddenResponse,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { Roles } from '@shared/decorators/roles.decorator';
 import { TenantService } from '../application/tenant.service';
@@ -40,6 +42,25 @@ export class TenantController {
   @ApiCreatedResponse({ description: 'Tenant created' })
   create(@Body() dto: CreateTenantDto) {
     return this.tenantService.create(dto);
+  }
+
+  @Get()
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'List all tenants paginated [SUPER_ADMIN]' })
+  @ApiOkResponse({ description: 'Paginated list of tenants' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'search', required: false, type: String })
+  findAll(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.tenantService.findAll({
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      search,
+    });
   }
 
   @Get(':id')

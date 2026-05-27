@@ -4,6 +4,7 @@
   Get,
   HttpCode,
   HttpStatus,
+  NotFoundException,
   Param,
   ParseUUIDPipe,
   Post,
@@ -97,6 +98,27 @@ export class ResponseController {
     @CurrentUser() user: JwtPayload,
   ) {
     return this.completeSession.execute(sessionId, user.sub);
+  }
+
+  @Get(':sessionId')
+  @Roles('RESPONDENT', 'CREATOR', 'TENANT_ADMIN', 'SUPER_ADMIN')
+  @ApiOperation({ summary: 'Get a single response session (must belong to caller)' })
+  @ApiOkResponse({ description: 'Session with form summary' })
+  @ApiNotFoundResponse({ description: 'Session not found' })
+  async findOne(
+    @Param('sessionId', ParseUUIDPipe) sessionId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const session = await this.prisma.responseSession.findFirst({
+      where: { id: sessionId, userId: user.sub },
+      include: {
+        form: { select: { id: true, title: true, type: true, config: true } },
+      },
+    });
+    if (!session) {
+      throw new NotFoundException('Session not found');
+    }
+    return session;
   }
 
   @Get(':sessionId/progress')

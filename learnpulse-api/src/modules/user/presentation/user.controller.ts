@@ -25,6 +25,8 @@ import {
 } from '@nestjs/swagger';
 import { Roles } from '@shared/decorators/roles.decorator';
 import { CurrentTenant } from '@shared/decorators/current-tenant.decorator';
+import { CurrentUser } from '@shared/decorators/current-user.decorator';
+import { JwtPayload } from '@shared/types/jwt-payload.type';
 import { UserService } from '../application/user.service';
 import { AssignRoleDto, CreateUserDto, UpdateUserDto } from '../application/dtos/user.dto';
 import { RoleType } from '@prisma/client';
@@ -114,9 +116,10 @@ export class UserController {
   removeRole(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentTenant() tenantId: string,
+    @CurrentUser() current: JwtPayload,
     @Param('role') role: string,
   ) {
-    return this.userService.removeRole(id, tenantId, role as RoleType);
+    return this.userService.removeRole(id, tenantId, role as RoleType, current.sub);
   }
 
   @Delete(':id')
