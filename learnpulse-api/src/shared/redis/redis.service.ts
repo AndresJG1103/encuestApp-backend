@@ -114,4 +114,8 @@ export class RedisService implements OnModuleDestroy {
       completes: parseInt(completes ?? '0', 10),
     };
   }
+
+  async ping(): Promise<string> {
+    return this.client.ping();
+  }
 }

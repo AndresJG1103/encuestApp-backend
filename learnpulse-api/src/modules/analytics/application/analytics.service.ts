@@ -168,4 +168,57 @@ export class AnalyticsService {
       timeBySection,
     };
   }
+
+  async getDashboardMetrics(tenantId: string) {
+    const [activeEmployees, totalSessions, recentSessions, tenant] = await Promise.all([
+      this.prisma.user.count({ where: { tenantId, deletedAt: null } }),
+      this.prisma.responseSession.count({ where: { form: { tenantId } } }),
+      this.prisma.responseSession.findMany({
+        where: { form: { tenantId } },
+        include: {
+          user: { select: { firstName: true, lastName: true, email: true } },
+          form: { select: { title: true } },
+        },
+        take: 5,
+        orderBy: { startedAt: 'desc' },
+      }),
+      this.prisma.tenant.findUnique({ where: { id: tenantId } }),
+    ]);
+
+    // Calculate revenue based on plan and active users (mocked logic but tied to DB state)
+    let revenueValue = 0;
+    if (tenant?.plan === 'PRO') revenueValue = activeEmployees * 10;
+    else if (tenant?.plan === 'ENTERPRISE') revenueValue = activeEmployees * 25 + 500;
+    
+    const totalRevenue = new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      maximumFractionDigits: 0,
+    }).format(revenueValue);
+
+    // Real system health check
+    let systemHealth = '100%';
+    try {
+      await Promise.all([
+        this.prisma.$queryRaw`SELECT 1`,
+        this.redis.ping(),
+      ]);
+    } catch (error) {
+      systemHealth = 'Degraded';
+    }
+
+    return {
+      activeEmployees,
+      totalSessions,
+      totalRevenue,
+      systemHealth,
+      recentActivity: recentSessions.map((s) => ({
+        id: s.id,
+        userName: `${s.user.firstName} ${s.user.lastName}`,
+        formTitle: s.form.title,
+        status: s.status,
+        startedAt: s.startedAt,
+      })),
+    };
+  }
 }
