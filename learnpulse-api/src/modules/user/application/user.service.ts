@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -134,7 +135,29 @@ export class UserService {
     });
   }
 
-  async removeRole(id: string, tenantId: string, role: RoleType): Promise<void> {
+  async removeRole(
+    id: string,
+    tenantId: string,
+    role: RoleType,
+    currentUserId: string,
+  ): Promise<void> {
+    if (role === RoleType.SUPER_ADMIN && id === currentUserId) {
+      throw new ForbiddenException(
+        'No puedes remover tu propio rol SUPER_ADMIN. Pide a otro SUPER_ADMIN que lo haga.',
+      );
+    }
+
+    if (role === RoleType.SUPER_ADMIN) {
+      const totalSuperAdmins = await this.prisma.userRole.count({
+        where: { role: RoleType.SUPER_ADMIN },
+      });
+      if (totalSuperAdmins <= 1) {
+        throw new ForbiddenException(
+          'No se puede remover el último SUPER_ADMIN del sistema.',
+        );
+      }
+    }
+
     await this.prisma.userRole.deleteMany({
       where: { userId: id, tenantId, role },
     });

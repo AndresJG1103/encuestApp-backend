@@ -4,9 +4,15 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '@shared/prisma/prisma.service';
-import { Assignment, AssignmentStatus } from '@prisma/client';
+import { Assignment, AssignmentStatus, Prisma } from '@prisma/client';
 import { PaginatedResult, PaginationParams } from '@shared/types/paginated.type';
 import { CreateAssignmentDto, UpdateAssignmentDto } from './dtos/assignment.dto';
+
+export interface AssignmentFilters {
+  formId?: string;
+  userId?: string;
+  status?: AssignmentStatus;
+}
 
 @Injectable()
 export class AssignmentService {
@@ -49,6 +55,43 @@ export class AssignmentService {
         user: { select: { id: true, email: true, firstName: true, lastName: true } },
       },
     });
+  }
+
+  async findAll(
+    tenantId: string,
+    params: PaginationParams & AssignmentFilters,
+  ): Promise<PaginatedResult<Assignment>> {
+    const page = params.page ?? 1;
+    const limit = Math.min(params.limit ?? 20, 100);
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.AssignmentWhereInput = {
+      form: { tenantId, deletedAt: null },
+      ...(params.formId && { formId: params.formId }),
+      ...(params.userId && { userId: params.userId }),
+      ...(params.status && { status: params.status }),
+    };
+
+    const [data, total] = await Promise.all([
+      this.prisma.assignment.findMany({
+        where,
+        skip,
+        take: limit,
+        include: {
+          form: { select: { id: true, title: true, type: true, status: true } },
+          user: {
+            select: { id: true, email: true, firstName: true, lastName: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.assignment.count({ where }),
+    ]);
+
+    return {
+      data,
+      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    };
   }
 
   async findMine(

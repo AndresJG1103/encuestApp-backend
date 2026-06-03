@@ -62,17 +62,30 @@ export class LoginUseCase {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    return this.generateTokens(user.id, tenant.id, user.roles.map((r) => r.role));
+    return this.generateTokens(user.id, tenant.id, user.roles.map((r) => r.role), {
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+    });
   }
 
   async generateTokens(
     userId: string,
     tenantId: string,
     roles: string[],
+    profile?: { firstName?: string; lastName?: string; email?: string },
   ): Promise<AuthTokens> {
     const jti = uuidv4();
 
-    const payload: JwtPayload = { sub: userId, tenantId, roles, jti };
+    const payload: JwtPayload = {
+      sub: userId,
+      tenantId,
+      roles,
+      jti,
+      ...(profile?.firstName && { firstName: profile.firstName }),
+      ...(profile?.lastName && { lastName: profile.lastName }),
+      ...(profile?.email && { email: profile.email }),
+    };
 
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload as unknown as Record<string, unknown>, {

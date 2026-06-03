@@ -36,13 +36,16 @@ export class RefreshTokenUseCase {
     // Delete old refresh token (rotation)
     await this.redis.deleteRefreshToken(payload.sub, payload.jti);
 
-    // Fetch current user roles
-    const userRoles = await this.prisma.userRole.findMany({
-      where: { userId: payload.sub, tenantId: payload.tenantId },
-      select: { role: true },
+    // Fetch current user roles + profile
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+      include: { roles: { select: { role: true } } },
     });
+    if (!user) {
+      throw new UnauthorizedException('User no longer exists');
+    }
 
-    const roles = userRoles.map((r) => r.role as string);
+    const roles = user.roles.map((r) => r.role as string);
     const newJti = uuidv4();
 
     const newPayload: JwtPayload = {
@@ -50,6 +53,9 @@ export class RefreshTokenUseCase {
       tenantId: payload.tenantId,
       roles,
       jti: newJti,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
     };
 
     const [accessToken, newRefreshToken] = await Promise.all([

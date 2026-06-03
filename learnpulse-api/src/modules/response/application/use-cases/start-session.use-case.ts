@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -45,13 +44,13 @@ export class StartSessionUseCase {
       throw new BadRequestException('Maximum attempts reached for this form');
     }
 
-    // Check for existing IN_PROGRESS session
+    // Resume existing IN_PROGRESS session if present
     const inProgress = await this.prisma.responseSession.findFirst({
       where: { formId, userId, status: SessionStatus.IN_PROGRESS },
     });
 
     if (inProgress) {
-      throw new ConflictException('A session is already in progress for this form');
+      return inProgress;
     }
 
     const session = await this.prisma.responseSession.create({

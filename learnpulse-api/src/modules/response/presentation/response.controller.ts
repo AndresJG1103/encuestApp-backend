@@ -1,9 +1,11 @@
 ﻿import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
+  NotFoundException,
   Param,
   ParseUUIDPipe,
   Post,
@@ -99,23 +101,74 @@ export class ResponseController {
     return this.completeSession.execute(sessionId, user.sub);
   }
 
-  @Get(':sessionId/progress')
-  @Roles('RESPONDENT', 'CREATOR', 'TENANT_ADMIN', 'SUPER_ADMIN')
-  @ApiOperation({ summary: 'Get current session progress snapshot (Redis first, then DB)' })
-  @ApiOkResponse({ description: 'Progress snapshot object' })
-  async progress(
-    @Param('sessionId', ParseUUIDPipe) sessionId: string,
+  @Get()
+  @Roles('REVIEWER', 'CREATOR', 'TENANT_ADMIN', 'SUPER_ADMIN')
+  @ApiOperation({
+    summary:
+      'List response sessions filtered by form/user/status. Scope: SUPER_ADMIN=any, TENANT_ADMIN/REVIEWER=tenant, CREATOR=own forms',
+  })
+  @ApiOkResponse({ description: 'Paginated list of sessions' })
+  @ApiQuery({ name: 'formId', required: false })
+  @ApiQuery({ name: 'userId', required: false })
+  @ApiQuery({ name: 'status', required: false, enum: ['IN_PROGRESS', 'SUBMITTED', 'COMPLETED', 'ABANDONED'] })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async findAll(
     @CurrentUser() user: JwtPayload,
+    @CurrentTenant() tenantId: string,
+    @Query('formId') formId?: string,
+    @Query('userId') userId?: string,
+    @Query('status') status?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    const cached = await this.redis.getSessionProgress(sessionId);
-    if (cached) return cached;
+    const pageNum = page ? parseInt(page, 10) : 1;
+    const limitNum = Math.min(limit ? parseInt(limit, 10) : 20, 100);
+    const skip = (pageNum - 1) * limitNum;
 
-    const session = await this.prisma.responseSession.findFirst({
-      where: { id: sessionId, userId: user.sub },
-      select: { progressSnapshot: true },
-    });
+    const isSuperAdmin = user.roles.includes('SUPER_ADMIN');
+    const isTenantStaff =
+      user.roles.includes('TENANT_ADMIN') || user.roles.includes('REVIEWER');
+    const isCreatorOnly =
+      !isSuperAdmin && !isTenantStaff && user.roles.includes('CREATOR');
 
-    return session?.progressSnapshot ?? {};
+    const where: any = {};
+    if (formId) where.formId = formId;
+    if (userId) where.userId = userId;
+    if (status) where.status = status;
+
+    if (!isSuperAdmin) {
+      where.form = where.form ?? {};
+      if (isCreatorOnly) {
+        where.form.createdById = user.sub;
+      } else {
+        where.form.tenantId = tenantId;
+      }
+    }
+
+    const [data, total] = await Promise.all([
+      this.prisma.responseSession.findMany({
+        where,
+        skip,
+        take: limitNum,
+        orderBy: { startedAt: 'desc' },
+        include: {
+          form: { select: { id: true, title: true, type: true } },
+          user: { select: { id: true, firstName: true, lastName: true, email: true } },
+        },
+      }),
+      this.prisma.responseSession.count({ where }),
+    ]);
+
+    return {
+      data,
+      meta: {
+        total,
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.ceil(total / limitNum),
+      },
+    };
   }
 
   @Get('my')
@@ -155,6 +208,77 @@ export class ResponseController {
         totalPages: Math.ceil(total / limitNum),
       },
     };
+  }
+
+  @Get(':sessionId')
+  @Roles('RESPONDENT', 'REVIEWER', 'CREATOR', 'TENANT_ADMIN', 'SUPER_ADMIN')
+  @ApiOperation({
+    summary:
+      'Get a single response session. SUPER_ADMIN: any. TENANT_ADMIN/REVIEWER: same tenant. CREATOR: own or sessions of forms they created. RESPONDENT: own only.',
+  })
+  @ApiOkResponse({ description: 'Session with form summary' })
+  @ApiForbiddenResponse({ description: 'No access to this session' })
+  @ApiNotFoundResponse({ description: 'Session not found' })
+  async findOne(
+    @Param('sessionId', ParseUUIDPipe) sessionId: string,
+    @CurrentUser() user: JwtPayload,
+    @CurrentTenant() tenantId: string,
+  ) {
+    const session = await this.prisma.responseSession.findUnique({
+      where: { id: sessionId },
+      include: {
+        form: {
+          select: {
+            id: true,
+            title: true,
+            type: true,
+            config: true,
+            tenantId: true,
+            createdById: true,
+          },
+        },
+        user: {
+          select: { id: true, firstName: true, lastName: true, email: true },
+        },
+      },
+    });
+    if (!session) {
+      throw new NotFoundException('Session not found');
+    }
+
+    const isOwner = session.userId === user.sub;
+    const isSuperAdmin = user.roles.includes('SUPER_ADMIN');
+    const isTenantStaff =
+      session.form.tenantId === tenantId &&
+      (user.roles.includes('TENANT_ADMIN') || user.roles.includes('REVIEWER'));
+    const isFormCreator =
+      user.roles.includes('CREATOR') &&
+      session.form.createdById === user.sub;
+
+    if (!isOwner && !isSuperAdmin && !isTenantStaff && !isFormCreator) {
+      throw new ForbiddenException('No access to this session');
+    }
+
+    return session;
+  }
+
+  @Get(':sessionId/progress')
+  @Roles('RESPONDENT', 'CREATOR', 'TENANT_ADMIN', 'SUPER_ADMIN')
+  @ApiOperation({ summary: 'Get current session progress snapshot (Redis first, then DB)' })
+  @ApiOkResponse({ description: 'Progress snapshot object' })
+  async progress(
+    @Param('sessionId', ParseUUIDPipe) sessionId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const cached = await this.redis.getSessionProgress(sessionId);
+    if (cached) return cached;
+
+    const session = await this.prisma.responseSession.findFirst({
+      where: { id: sessionId, userId: user.sub },
+      select: { progressSnapshot: true },
+    });
+
+    return session?.progressSnapshot ?? {};
   }
 }
 

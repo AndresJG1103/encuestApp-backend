@@ -27,6 +27,7 @@ import {
   CreateAssignmentDto,
   UpdateAssignmentDto,
 } from '../application/dtos/assignment.dto';
+import { AssignmentStatus } from '@prisma/client';
 
 @ApiTags('Assignments')
 @ApiBearerAuth('JWT')
@@ -46,6 +47,32 @@ export class AssignmentController {
     @Body() dto: CreateAssignmentDto,
   ) {
     return this.assignmentService.create(tenantId, user.sub, dto);
+  }
+
+  @Get()
+  @Roles('CREATOR', 'TENANT_ADMIN', 'SUPER_ADMIN')
+  @ApiOperation({ summary: 'List all assignments in tenant (filterable) [CREATOR+]' })
+  @ApiOkResponse({ description: 'Paginated list of assignments with user + form' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'formId', required: false, type: String })
+  @ApiQuery({ name: 'userId', required: false, type: String })
+  @ApiQuery({ name: 'status', required: false, enum: AssignmentStatus })
+  findAll(
+    @CurrentTenant() tenantId: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('formId') formId?: string,
+    @Query('userId') userId?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.assignmentService.findAll(tenantId, {
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      formId,
+      userId,
+      status: status as AssignmentStatus | undefined,
+    });
   }
 
   @Get('my')
